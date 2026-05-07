@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐾 IoT Pet Feeder | Smart Pet Monitoring System</title>
+
+<!-- Chart.js untuk grafik -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+
+<style>
+/* ===== STYLE SAMA PERSIS DENGAN KODE KAMU ===== */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #FFF8ED 0%, #FEF0DF 100%);
+  color: #2D2A24;
+  overflow-x: hidden;
+}
+
+.toggle-btn {
+  position: fixed;
+  top: 15px;
+  left: 15px;
+  z-index: 1001;
+  width: 45px;
+  height: 45px;
+  border: none;
+  background: #E76F51;
+  color: white;
+  cursor: pointer;
+  border-radius: 12px;
+  font-size: 1.5rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(231, 111, 81, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toggle-btn:hover { background: #D45A3A; transform: scale(1.05); }
+
+.app { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 260px;
+  background: linear-gradient(180deg, #FDF5E8 0%, #F8EEDE 100%);
+  border-right: 2px solid #F0DEBF;
+  padding: 1.5rem 0;
+  transition: transform 0.3s ease;
+  position: fixed;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 100;
+  transform: translateX(0);
+}
+
+.sidebar.closed { transform: translateX(-100%); }
+.sidebar.open { transform: translateX(0); }
+
+@media (min-width: 769px) {
+  .sidebar.closed { transform: translateX(-100%); }
+  .sidebar.closed ~ .main { margin-left: 0; }
+}
+
+.sidebar-header {
+  text-align: center;
+  padding: 0 1rem 1.5rem 1rem;
+  border-bottom: 2px solid #F0DDBD;
+  margin-bottom: 1.5rem;
+  cursor: pointer;
+}
+
+.logo-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+
+.nav-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0 0.8rem;
+}
+
+.nav-links a {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  text-decoration: none;
+  color: #7A5638;
+  font-weight: 600;
+  border-radius: 14px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.nav-links a:hover { background: #FCE6CD; color: #C25D2E; }
+.nav-links a.active { background: #F5DDB6; color: #D46B2E; }
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 1rem;
+  border-top: 2px solid #F0DDBD;
+  margin-top: 2rem;
+}
+
+.pet-status {
+  text-align: center;
+  background: #FFF5EA;
+  border-radius: 16px;
+  padding: 0.8rem;
+}
+
+.main {
+  flex: 1;
+  margin-left: 260px;
+  padding: 20px 30px;
+  transition: margin-left 0.3s ease;
+}
+
+.sidebar.closed ~ .main { margin-left: 0; }
+
+.global-header {
+  background: linear-gradient(135deg, #FFFFFF 0%, #FFF9F0 100%);
+  border-radius: 24px;
+  padding: 1.5rem 2rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+  border: 1px solid #F5E3CA;
+}
+
+.global-header h1 {
+  font-size: 1.8rem;
+  background: linear-gradient(135deg, #2D4A3E, #E76F51);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-stats {
+  display: flex;
+  gap: 1.5rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.header-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #FCF3E6;
+  padding: 6px 14px;
+  border-radius: 40px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.header-stat .stat-value { color: #D46B2E; }
+
+.hero-section {
+  background: linear-gradient(135deg, #FFFFFF 0%, #FFF9F0 100%);
+  border-radius: 28px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 1.5rem;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.card {
+  background: white;
+  border-radius: 24px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+  border: 1px solid #F2E1C6;
+  transition: transform 0.2s;
+}
+
+.card:hover { transform: translateY(-4px); }
+
+.sensor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.sensor-card {
+  background: linear-gradient(135deg, #FCF6EA, #FEF9F0);
+  border-radius: 20px;
+  padding: 1rem;
+  text-align: center;
+  border: 1px solid #F2E0CA;
+}
+
+.sensor-card .sensor-value {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #2F4F3A;
+}
+
+.btn-feed {
+  background: linear-gradient(105deg, #F2A65A, #E8873C);
+  border: none;
+  width: 100%;
+  padding: 14px;
+  border-radius: 50px;
+  font-weight: 700;
+  font-size: 1rem;
+  color: white;
+  cursor: pointer;
+  margin-top: 1rem;
+}
+
+.btn-feed:hover { transform: scale(1.02); }
+
+.chart-container {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: #FFFFFF;
+  border-radius: 20px;
+}
+
+.chart-title {
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #7A5638;
+}
+
+canvas { max-height: 180px; width: 100%; }
+
+.divider {
+  height: 2px;
+  background: linear-gradient(90deg, #F4A261, #E76F51);
+  border-radius: 3px;
+  margin: 15px 0;
+}
+
+.toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2D4A3E;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 50px;
+  font-weight: 500;
+  z-index: 2000;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.toast.show { opacity: 1; }
+
+@media (max-width: 768px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .main { margin-left: 0; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .sensor-grid { grid-template-columns: 1fr; }
+  .toggle-btn { display: flex; }
+}
+
+@media (min-width: 769px) { .toggle-btn { display: flex; } }
+</style>
+</head>
+<body>
+
+<button id="toggleSidebar" class="toggle-btn">☰</button>
+
+<div class="app">
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header" id="logoHome">
+      <div class="logo-icon">🐾</div>
+      <h2>PetFeeder</h2>
+    </div>
+    <div class="divider"></div>
+    <div class="nav-links">
+      <a class="nav-item" data-page="fitur">✨ Fitur</a>
+      <a class="nav-item" data-page="monitoring">📡 Monitoring</a>
+      <a class="nav-item" data-page="tentang">🐕 Tentang</a>
+    </div>
+    <div class="divider"></div>
+    <div class="sidebar-footer">
+      <div class="pet-status">
+        <span>🐱🐶</span>
+        <p>Anabul Online</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="main" id="mainContent">
+    <div id="pageContent"></div>
+  </div>
+</div>
+
+<script>
+// ========== MQTT ==========
+let mqttClient = null;
+let isMqttConnected = false;
+
+// ========== DATA STATE ==========
+let sensorData = {
+  temperature: 28.5,
+  humidity: 65,
+  gas: 47,
+  distance: 35
+};
+
+let foodPercent = 78;
+let lastFeedTime = new Date();
+let currentPage = 'home';
+let isSidebarOpen = true;
+
+// History untuk grafik (data dari MQTT)
+let historyData = {
+  time: [],
+  temperature: [],
+  humidity: [],
+  gas: [],
+  distance: []
+};
+
+// Chart instances
+let tempChart = null, humChart = null, gasChart = null, distChart = null;
+
+// ===== KONEK MQTT KE BROKER =====
+function connectMQTT() {
+  const options = {
+    clientId: "web_feeder_" + Math.random().toString(16).substr(2, 8),
+    keepalive: 60,
+    clean: true,
+    reconnectPeriod: 1000
+  };
+  
+  mqttClient = mqtt.connect("wss://broker.emqx.io:8084/mqtt", options);
+  
+  mqttClient.on("connect", () => {
+    console.log("✅ MQTT Terhubung ke broker!");
+    isMqttConnected = true;
+    showToast("📡 Terhubung ke ESP32!", false);
+    
+    // Subscribe ke topic dari ESP32
+    mqttClient.subscribe("suhukeun");
+    mqttClient.subscribe("lembabkeun");
+    mqttClient.subscribe("gaskeun");
+    mqttClient.subscribe("status");
+    // NOTE: ESP32 tidak publish ke "jarakkeun", jadi kita tidak subscribe
+    
+    updateConnectionStatus(true);
+  });
+  
+  mqttClient.on("message", (topic, message) => {
+    const nilai = message.toString();
+    console.log(`📥 ${topic}: ${nilai}`);
+    
+    // Update data sensor
+    if (topic === "suhukeun") {
+      sensorData.temperature = Number(nilai);
+    }
+    else if (topic === "lembabkeun") {
+      sensorData.humidity = Number(nilai);
+    }
+    else if (topic === "gaskeun") {
+      sensorData.gas = Number(nilai);
+      if (Number(nilai) > 2000) {
+        showToast("⚠️ PERINGATAN! Kadar gas berbahaya!", true);
+      }
+    }
+    else if (topic === "status") {
+      console.log("Status dari ESP32:", nilai);
+    }
+    
+    // ✅ TAMBAHKAN KE HISTORY UNTUK GRAFIK
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+    historyData.time.push(timeStr);
+    historyData.temperature.push(sensorData.temperature);
+    historyData.humidity.push(sensorData.humidity);
+    historyData.gas.push(sensorData.gas);
+    // Simulasi distance untuk grafik (karena ESP32 tidak kirim)
+    historyData.distance.push(sensorData.distance);
+    
+    // Hanya simpan 15 data terakhir
+    if (historyData.time.length > 15) {
+      historyData.time.shift();
+      historyData.temperature.shift();
+      historyData.humidity.shift();
+      historyData.gas.shift();
+      historyData.distance.shift();
+    }
+    
+    // Update tampilan
+    if (currentPage === 'home') updateHomeSensorUI();
+    if (currentPage === 'monitoring') {
+      updateMonitoringUI();
+      updateChartsData();
+    }
+    updateHeaderStats();
+  });
+  
+  mqttClient.on("error", (err) => {
+    console.error("MQTT Error:", err);
+    isMqttConnected = false;
+    updateConnectionStatus(false);
+  });
+  
+  mqttClient.on("close", () => {
+    console.log("MQTT Terputus");
+    isMqttConnected = false;
+    updateConnectionStatus(false);
+  });
+}
+
+// ===== KIRIM PERINTAH FEED KE ESP32 =====
+function sendFeedCommand() {
+  if (!isMqttConnected || !mqttClient) {
+    showToast("❌ ESP32 tidak terhubung!", true);
+    return;
+  }
+  
+  mqttClient.publish("perintah/feeder", "FEED");
+  console.log("📤 Perintah FEED dikirim ke ESP32");
+  showToast("🍖 Perintah memberi makan dikirim!", false);
+  
+  // Update last feed time
+  lastFeedTime = new Date();
+  updateHeaderStats();
+}
+
+function updateConnectionStatus(connected) {
+  const headerTitle = document.querySelector('.global-header h1 span:first-child');
+  const statusSpan = document.querySelector('.global-header h1 span:last-child');
+  if (statusSpan && headerTitle) {
+    if (connected) {
+      statusSpan.innerHTML = '✅ Online';
+      statusSpan.style.background = '#2A9D8F20';
+    } else {
+      statusSpan.innerHTML = '❌ Offline';
+      statusSpan.style.background = '#E76F5120';
+    }
+  }
+}
+
+// ===== FUNGSI LAINNYA =====
+function showToast(msg, isErr = false) {
+  let toast = document.querySelector('.toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.style.background = isErr ? '#E76F51' : '#2D4A3E';
+    document.body.appendChild(toast);
+  }
+  toast.style.background = isErr ? '#E76F51' : '#2D4A3E';
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+function getNextSchedule() {
+  const times = [8, 12, 17, 20];
+  const nowHour = new Date().getHours();
+  let next = times.find(t => t > nowHour);
+  if (!next) next = times[0] + 24;
+  let display = next > 24 ? next - 24 : next;
+  return `${display.toString().padStart(2, '0')}:00 WIB`;
+}
+
+function updateHeaderStats() {
+  const foodStat = document.getElementById('headerFood');
+  const lastStat = document.getElementById('headerLast');
+  const headerTemp = document.getElementById('headerTemp');
+  
+  if (foodStat) foodStat.innerText = foodPercent + '%';
+  if (lastStat) lastStat.innerText = lastFeedTime.toLocaleTimeString();
+  if (headerTemp) headerTemp.innerText = sensorData.temperature + '°C';
+}
+
+function renderGlobalHeader() {
+  const statusText = isMqttConnected ? '✅ Online' : '❌ Offline';
+  const statusBg = isMqttConnected ? '#2A9D8F20' : '#E76F5120';
+  
+  return `
+    <div class="global-header">
+      <h1>
+        <span>🐾 IoT Pet Feeder</span>
+        <span style="font-size:0.7rem; background:${statusBg}; padding:4px 12px; border-radius:50px;">${statusText}</span>
+      </h1>
+      <div class="header-stats">
+        <div class="header-stat">🍽️ Sisa Pakan: <span class="stat-value" id="headerFood">${foodPercent}%</span></div>
+        <div class="header-stat">🕒 Last Feed: <span class="stat-value" id="headerLast">${lastFeedTime.toLocaleTimeString()}</span></div>
+        <div class="header-stat">⏰ Next: <span class="stat-value">${getNextSchedule()}</span></div>
+        <div class="header-stat">🌡️ Suhu: <span class="stat-value" id="headerTemp">${sensorData.temperature}°C</span></div>
+      </div>
+    </div>
+  `;
+}
+
+function renderHomePage() {
+  currentPage = 'home';
+  document.getElementById('pageContent').innerHTML = `
+    <div class="page-container">
+      ${renderGlobalHeader()}
+      <div class="hero-section">
+        <h2>🐶 Selamat Datang di IoT Pet Feeder 🐱</h2>
+        <p>Pantau suhu, kelembaban, gas, dan jarak secara real-time dari ESP32!</p>
+      </div>
+      <div class="grid-3">
+        <div class="card">
+          <h3>📌 Tentang Project</h3>
+          <p>IoT Pet Feeder menggunakan ESP32, sensor DHT22, MQ-135, dan HC-SR04.</p>
+        </div>
+        <div class="card">
+          <h3>✨ Fitur Utama</h3>
+          <ul><li>✅ Monitoring real-time</li><li>✅ Kontrol via MQTT</li><li>✅ Grafik sensor</li></ul>
+        </div>
+        <div class="card">
+          <h3>📡 Status Sensor</h3>
+          <div class="sensor-grid">
+            <div class="sensor-card"><div>🌡️</div><div class="sensor-value" id="tempHome">${sensorData.temperature}°C</div></div>
+            <div class="sensor-card"><div>💧</div><div class="sensor-value" id="humHome">${sensorData.humidity}%</div></div>
+            <div class="sensor-card"><div>☁️</div><div class="sensor-value" id="gasHome">${sensorData.gas} ppm</div></div>
+            <div class="sensor-card"><div>📏</div><div class="sensor-value" id="distHome">${sensorData.distance} cm</div></div>
+          </div>
+          <button class="btn-feed" id="feedBtn">🍖 BERI MAKAN</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('feedBtn')?.addEventListener('click', sendFeedCommand);
+  updateHomeSensorUI();
+}
+
+function updateHomeSensorUI() {
+  const t = document.getElementById('tempHome');
+  const h = document.getElementById('humHome');
+  const g = document.getElementById('gasHome');
+  const d = document.getElementById('distHome');
+  if (t) t.innerText = sensorData.temperature + '°C';
+  if (h) h.innerText = sensorData.humidity + '%';
+  if (g) g.innerText = sensorData.gas + ' ppm';
+  if (d) d.innerText = sensorData.distance + ' cm';
+  updateHeaderStats();
+}
+
+function renderMonitoringPage() {
+  currentPage = 'monitoring';
+  document.getElementById('pageContent').innerHTML = `
+    <div class="page-container">
+      ${renderGlobalHeader()}
+      <div class="grid-2">
+        <div class="card">
+          <h3>📡 Data Sensor</h3>
+          <div class="sensor-grid">
+            <div class="sensor-card"><div>🌡️</div><div class="sensor-value" id="tempMon">${sensorData.temperature}°C</div></div>
+            <div class="sensor-card"><div>💧</div><div class="sensor-value" id="humMon">${sensorData.humidity}%</div></div>
+            <div class="sensor-card"><div>☁️</div><div class="sensor-value" id="gasMon">${sensorData.gas} ppm</div></div>
+            <div class="sensor-card"><div>📏</div><div class="sensor-value" id="distMon">${sensorData.distance} cm</div></div>
+          </div>
+          <button class="btn-feed" id="feedMonBtn">🍖 BERI MAKAN</button>
+        </div>
+        <div class="card">
+          <h3>📈 Grafik Sensor (15 data terakhir)</h3>
+          <div class="chart-container"><div class="chart-title">🌡️ Suhu</div><canvas id="tempChart"></canvas></div>
+          <div class="chart-container"><div class="chart-title">💧 Kelembaban</div><canvas id="humChart"></canvas></div>
+          <div class="chart-container"><div class="chart-title">☁️ Gas</div><canvas id="gasChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('feedMonBtn')?.addEventListener('click', sendFeedCommand);
+  createCharts();
+  updateMonitoringUI();
+}
+
+function createCharts() {
+  const labels = historyData.time.length ? historyData.time : ['--'];
+  const tempData = historyData.temperature.length ? historyData.temperature : [sensorData.temperature];
+  const humData = historyData.humidity.length ? historyData.humidity : [sensorData.humidity];
+  const gasData = historyData.gas.length ? historyData.gas : [sensorData.gas];
+  
+  const tempCtx = document.getElementById('tempChart')?.getContext('2d');
+  if (tempCtx) {
+    if (tempChart) tempChart.destroy();
+    tempChart = new Chart(tempCtx, {
+      type: 'line',
+      data: { 
+        labels: labels, 
+        datasets: [{ 
+          label: 'Suhu (°C)', 
+          data: tempData, 
+          borderColor: '#E76F51', 
+          backgroundColor: '#E76F5120',
+          tension: 0.3,
+          fill: true
+        }] 
+      }
+    });
+  }
+  
+  const humCtx = document.getElementById('humChart')?.getContext('2d');
+  if (humCtx) {
+    if (humChart) humChart.destroy();
+    humChart = new Chart(humCtx, {
+      type: 'line',
+      data: { 
+        labels: labels, 
+        datasets: [{ 
+          label: 'Kelembaban (%)', 
+          data: humData, 
+          borderColor: '#2A9D8F', 
+          backgroundColor: '#2A9D8F20',
+          tension: 0.3,
+          fill: true
+        }] 
+      }
+    });
+  }
+  
+  const gasCtx = document.getElementById('gasChart')?.getContext('2d');
+  if (gasCtx) {
+    if (gasChart) gasChart.destroy();
+    gasChart = new Chart(gasCtx, {
+      type: 'line',
+      data: { 
+        labels: labels, 
+        datasets: [{ 
+          label: 'Gas (ppm)', 
+          data: gasData, 
+          borderColor: '#E9C46A', 
+          backgroundColor: '#E9C46A20',
+          tension: 0.3,
+          fill: true
+        }] 
+      }
+    });
+  }
+}
+
+function updateChartsData() {
+  if (!historyData.time.length) return;
+  
+  if (tempChart) {
+    tempChart.data.labels = [...historyData.time];
+    tempChart.data.datasets[0].data = [...historyData.temperature];
+    tempChart.update('none');
+  }
+  if (humChart) {
+    humChart.data.labels = [...historyData.time];
+    humChart.data.datasets[0].data = [...historyData.humidity];
+    humChart.update('none');
+  }
+  if (gasChart) {
+    gasChart.data.labels = [...historyData.time];
+    gasChart.data.datasets[0].data = [...historyData.gas];
+    gasChart.update('none');
+  }
+}
+
+function updateMonitoringUI() {
+  const t = document.getElementById('tempMon');
+  const h = document.getElementById('humMon');
+  const g = document.getElementById('gasMon');
+  const d = document.getElementById('distMon');
+  if (t) t.innerText = sensorData.temperature + '°C';
+  if (h) h.innerText = sensorData.humidity + '%';
+  if (g) g.innerText = sensorData.gas + ' ppm';
+  if (d) d.innerText = sensorData.distance + ' cm';
+  updateHeaderStats();
+}
+
+function renderTentangPage() {
+  currentPage = 'tentang';
+  document.getElementById('pageContent').innerHTML = `
+    <div class="page-container">
+      ${renderGlobalHeader()}
+      <div class="card">
+        <h3>🐾 Tentang IoT Pet Feeder</h3>
+        <p>Project ini menggunakan ESP32, sensor DHT22, MQ-135, HC-SR04, dan servo motor.</p>
+        <div class="divider"></div>
+        <h3>📏 Tentang Sensor Jarak</h3>
+        <p>Sensor jarak HC-SR04 mengukur jarak ke mangkuk pakan. Jika jarak > 20cm, feeder akan memberi makan otomatis.</p>
+        <div class="divider"></div>
+        <h3>📡 Koneksi MQTT</h3>
+        <p>Broker: broker.emqx.io | Topic: suhukeun, lembabkeun, gaskeun, status</p>
+        <p>Kirim perintah ke topic: perintah/feeder dengan pesan "FEED"</p>
+      </div>
+    </div>
+  `;
+  updateHeaderStats();
+}
+
+// ===== SIDEBAR =====
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  isSidebarOpen = !isSidebarOpen;
+  if (window.innerWidth <= 768) {
+    if (isSidebarOpen) { sidebar.classList.add('open'); sidebar.classList.remove('closed'); }
+    else { sidebar.classList.remove('open'); sidebar.classList.add('closed'); }
+  } else {
+    if (isSidebarOpen) sidebar.classList.remove('closed');
+    else sidebar.classList.add('closed');
+  }
+}
+
+document.getElementById('toggleSidebar')?.addEventListener('click', toggleSidebar);
+document.getElementById('logoHome')?.addEventListener('click', () => {
+  renderHomePage();
+  if (window.innerWidth <= 768) toggleSidebar();
+});
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', (e) => {
+    e.preventDefault();
+    const page = item.getAttribute('data-page');
+    if (page === 'fitur') renderHomePage();
+    else if (page === 'monitoring') renderMonitoringPage();
+    else if (page === 'tentang') renderTentangPage();
+    if (window.innerWidth <= 768) toggleSidebar();
+  });
+});
+
+// ===== INISIALISASI =====
+connectMQTT();
+renderHomePage();
+
+if (window.innerWidth <= 768) {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.add('closed');
+  isSidebarOpen = false;
+}
+
+// Simulasi data awal untuk grafik
+for (let i = 0; i < 5; i++) {
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  historyData.time.push(timeStr);
+  historyData.temperature.push(sensorData.temperature);
+  historyData.humidity.push(sensorData.humidity);
+  historyData.gas.push(sensorData.gas);
+  historyData.distance.push(sensorData.distance);
+}
+</script>
+</body>
+</html>
