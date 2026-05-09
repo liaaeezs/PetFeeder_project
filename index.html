@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PetFeeder — IoT Dashboard</title>
+
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+
+<style>
+:root {
+  --bg: #f5f0e8;
+  --bg2: #ffffff;
+  --bg3: #ede8de;
+  --border: #d8d0c0;
+  --border2: #c8bfad;
+  --amber: #c07010;
+  --amber2: #d08020;
+  --amber-dim: #c0701018;
+  --red: #c0402a;
+  --red-dim: #c0402a14;
+  --green: #2e7d50;
+  --green-dim: #2e7d5014;
+  --blue: #2860a8;
+  --text: #1a1510;
+  --text2: #5a4e3c;
+  --text3: #9a8e7a;
+  --mono: 'DM Mono', monospace;
+  --serif: 'Playfair Display', serif;
+  --sans: 'DM Sans', sans-serif;
+  --shadow: 0 2px 12px #b0a89022;
+  --shadow-lg: 0 8px 32px #b0a89033;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(ellipse at 20% 20%, #fff8ee55 0%, transparent 60%),
+                    radial-gradient(ellipse at 80% 80%, #e8f4ee33 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.shell { display: flex; min-height: 100vh; position: relative; z-index: 1; }
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  height: 100vh;
+  z-index: 100;
+  transition: transform 0.35s cubic-bezier(0.77,0,0.175,1);
+  box-shadow: 2px 0 16px #b0a89018;
+}
+
+.sidebar.hidden { transform: translateX(-100%); }
+
+.sidebar-top {
+  padding: 2rem 1.5rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, #fff8f0 0%, #ffffff 100%);
+}
+
+.brand { display: flex; align-items: baseline; gap: 8px; cursor: pointer; }
+
+.brand-name {
+  font-family: var(--serif);
+  font-size: 1.4rem;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.brand-tag {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--amber);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border: 1px solid var(--amber);
+  padding: 1px 5px;
+  border-radius: 2px;
+  background: var(--amber-dim);
+}
+
+.conn-dot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 0.8rem;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--text3);
+  letter-spacing: 0.08em;
+}
+
+.dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.dot.online {
+  background: var(--green);
+  box-shadow: 0 0 6px #2e7d5066;
+  animation: blink 2s infinite;
+}
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+.nav {
+  padding: 1.5rem 0.8rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-section-label {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.15em;
+  color: var(--text3);
+  text-transform: uppercase;
+  padding: 0.6rem 12px 0.4rem;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text2);
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+
+.nav-item:hover { color: var(--text); background: var(--bg3); }
+.nav-item.active { color: var(--amber); background: var(--amber-dim); border-color: #c0701030; }
+.nav-icon { font-size: 0.75rem; width: 16px; text-align: center; }
+
+.sidebar-bottom {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--text3);
+  line-height: 1.8;
+  background: var(--bg3);
+}
+
+/* ===== MAIN ===== */
+.main {
+  margin-left: 220px;
+  flex: 1;
+  transition: margin-left 0.35s cubic-bezier(0.77,0,0.175,1);
+  min-height: 100vh;
+}
+
+.main.expanded { margin-left: 0; }
+
+/* ===== TOPBAR ===== */
+.topbar {
+  height: 52px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 1.5rem;
+  gap: 1rem;
+  position: sticky;
+  top: 0;
+  background: rgba(245, 240, 232, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 50;
+}
+
+.menu-btn {
+  width: 32px; height: 32px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+  box-shadow: var(--shadow);
+}
+
+.menu-btn span { display: block; width: 14px; height: 1.5px; background: var(--text2); transition: background 0.2s; }
+.menu-btn:hover span { background: var(--text); }
+
+.topbar-title {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text3);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.topbar-right { margin-left: auto; }
+
+.status-badge {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.status-badge.offline { background: #fde8e4; color: var(--red); border: 1px solid #c0402a33; }
+.status-badge.online { background: #e4f4ea; color: var(--green); border: 1px solid #2e7d5033; }
+
+/* ===== PAGE ===== */
+.page { padding: 2rem 2rem 4rem; animation: fadein 0.25s ease; }
+
+@keyframes fadein { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+
+.page-heading {
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.2em;
+  color: var(--amber);
+  text-transform: uppercase;
+  margin-bottom: 0.4rem;
+}
+
+.page-heading h1 {
+  font-family: var(--serif);
+  font-size: 2.4rem;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.page-heading p {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text2);
+  font-weight: 300;
+}
+
+/* ===== SENSOR STRIP ===== */
+.sensor-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 2rem;
+  background: var(--bg2);
+  box-shadow: var(--shadow);
+}
+
+.sensor-cell {
+  padding: 1.2rem 1.4rem;
+  border-right: 1px solid var(--border);
+  transition: background 0.2s;
+}
+
+.sensor-cell:last-child { border-right: none; }
+.sensor-cell:hover { background: #fdf8f2; }
+
+.s-label {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.15em;
+  color: var(--text3);
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+
+.s-val {
+  font-family: var(--mono);
+  font-size: 1.7rem;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.s-unit { font-size: 0.65rem; color: var(--text3); margin-left: 2px; }
+
+.s-bar {
+  height: 3px;
+  background: var(--border);
+  border-radius: 3px;
+  margin-top: 0.7rem;
+  overflow: hidden;
+}
+
+.s-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--amber) 0%, var(--amber2) 100%);
+  border-radius: 3px;
+  transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
+}
+
+.sensor-cell.danger .s-val { color: var(--red); }
+.sensor-cell.danger .s-bar-fill { background: linear-gradient(90deg, var(--red) 0%, #e05030 100%); }
+
+/* ===== SENSOR CELL ACCENT COLORS ===== */
+.sensor-cell:nth-child(1) .s-bar-fill { background: linear-gradient(90deg, #e05010 0%, #f07030 100%); }
+.sensor-cell:nth-child(2) .s-bar-fill { background: linear-gradient(90deg, #2e7d50 0%, #40a860 100%); }
+.sensor-cell:nth-child(3) .s-bar-fill { background: linear-gradient(90deg, #c0402a 0%, #e05030 100%); }
+.sensor-cell:nth-child(4) .s-bar-fill { background: linear-gradient(90deg, #2860a8 0%, #4080d0 100%); }
+
+/* ===== LAYOUT ===== */
+.grid-asym {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+/* ===== CARD ===== */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.card-head {
+  padding: 0.9rem 1.4rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #fdf8f2 0%, #ffffff 100%);
+}
+
+.c-title {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  color: var(--text2);
+  text-transform: uppercase;
+}
+
+.c-tag {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  color: var(--amber);
+  letter-spacing: 0.08em;
+  background: var(--amber-dim);
+  padding: 2px 7px;
+  border-radius: 20px;
+  border: 1px solid #c0701020;
+}
+
+.card-body { padding: 1.4rem; }
+
+/* ===== FEED CONTROL ===== */
+.feed-ring {
+  width: 110px; height: 110px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: linear-gradient(135deg, #fff8f0 0%, #ffffff 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.2rem;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 16px #c0701018;
+}
+
+.feed-ring::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1px dashed var(--border);
+}
+
+.feed-ring:hover {
+  border-color: var(--amber);
+  box-shadow: 0 8px 28px #c0701030;
+  transform: translateY(-2px);
+}
+
+.feed-ring:hover .feed-icon { transform: scale(1.15); }
+.feed-icon { font-size: 2rem; transition: transform 0.2s; }
+.feed-sublabel { font-family: var(--mono); font-size: 0.52rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); margin-top: 4px; }
+
+.btn-feed {
+  width: 100%;
+  padding: 11px;
+  background: linear-gradient(135deg, var(--amber) 0%, var(--amber2) 100%);
+  border: none;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: 0 3px 12px #c0701030;
+}
+
+.btn-feed:hover { transform: translateY(-1px); box-shadow: 0 6px 20px #c0701045; }
+.btn-feed:active { transform: translateY(0); }
+
+/* ===== LOG ===== */
+.log-item {
+  display: flex;
+  gap: 10px;
+  padding: 8px 1.4rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+}
+
+.log-item:last-child { border-bottom: none; }
+.log-time { color: var(--text3); min-width: 58px; flex-shrink: 0; }
+.log-msg { color: var(--text2); line-height: 1.4; }
+.log-msg.ok { color: var(--green); }
+.log-msg.warn { color: var(--red); }
+.log-msg.info { color: var(--amber); }
+
+/* ===== CHARTS ===== */
+.chart-row {
+  padding: 1rem 1.4rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.chart-row:last-child { border-bottom: none; }
+
+.chart-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.5rem;
+}
+
+.chart-row-label { font-family: var(--mono); font-size: 0.6rem; color: var(--text3); letter-spacing: 0.12em; text-transform: uppercase; }
+.chart-row-val { font-family: var(--mono); font-size: 0.9rem; font-weight: 500; color: var(--text); }
+
+.chart-wrap { position: relative; height: 80px; }
+
+/* ===== SPEC TABLE ===== */
+.spec-table { width: 100%; border-collapse: collapse; }
+.spec-table tr { border-bottom: 1px solid var(--border); }
+.spec-table tr:last-child { border-bottom: none; }
+.spec-table td { padding: 9px 0; font-size: 0.82rem; vertical-align: top; }
+.spec-table td:first-child {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--text3);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  width: 130px;
+  padding-right: 1rem;
+  padding-top: 11px;
+}
+.spec-table td:last-child { color: var(--text2); line-height: 1.6; }
+
+/* ===== ALARM BANNER ===== */
+.alarm-banner {
+  background: #fde8e4;
+  border: 1px solid #c0402a44;
+  border-radius: 10px;
+  padding: 0.8rem 1.2rem;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1.5rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--red);
+  letter-spacing: 0.06em;
+}
+
+.alarm-banner.show { display: flex; }
+
+/* ===== TOAST ===== */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  z-index: 2000;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: all 0.25s;
+  pointer-events: none;
+  max-width: 260px;
+  box-shadow: var(--shadow-lg);
+}
+
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.err { border-color: #c0402a44; color: var(--red); background: #fdf0ee; }
+.toast.ok { border-color: #2e7d5044; color: var(--green); background: #f0faf4; }
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 960px) {
+  .grid-asym { grid-template-columns: 1fr; }
+  .sensor-strip { grid-template-columns: repeat(2, 1fr); }
+  .sensor-cell:nth-child(2) { border-right: none; }
+  .sensor-cell:nth-child(3),
+  .sensor-cell:nth-child(4) { border-top: 1px solid var(--border); }
+  .sensor-cell:nth-child(4) { border-right: none; }
+}
+
+@media (max-width: 640px) {
+  .main { margin-left: 0 !important; }
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.mobile-open { transform: translateX(0); }
+  .page { padding: 1.2rem 1rem 3rem; }
+  .grid-2 { grid-template-columns: 1fr; }
+  .page-heading h1 { font-size: 1.8rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="brand" id="brandHome">
+        <span class="brand-name">PetFeeder</span>
+        <span class="brand-tag">IoT</span>
+      </div>
+      <div class="conn-dot">
+        <span class="dot" id="connDot"></span>
+        <span id="connText">OFFLINE</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-section-label">Halaman</div>
+      <div class="nav-item active" data-page="home">
+        <span class="nav-icon">◈</span> Overview
+      </div>
+      <div class="nav-item" data-page="monitoring">
+        <span class="nav-icon">◉</span> Monitoring
+      </div>
+      <div class="nav-item" data-page="tentang">
+        <span class="nav-icon">◎</span> Tentang
+      </div>
+    </nav>
+
+    <div class="sidebar-bottom">
+      iotclasszeyys.cloud.shiftr.io<br>
+      suhukeun · lembabkeun · gaskeun<br>
+      jarakkeun · status
+    </div>
+  </aside>
+
+  <div class="main" id="main">
+    <div class="topbar">
+      <button class="menu-btn" id="menuBtn" aria-label="toggle sidebar">
+        <span></span><span></span><span></span>
+      </button>
+      <span class="topbar-title" id="topbarTitle">Overview</span>
+      <div class="topbar-right">
+        <span class="status-badge offline" id="statusBadge">Offline</span>
+      </div>
+    </div>
+
+    <div id="pageContent"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== STATE =====
+let mqttClient = null;
+let isConnected = false;
+let currentPage = 'home';
+let sidebarOpen = window.innerWidth > 640;
+let alarmActive = false;
+let charts = {};
+let logs = [];
+
+let sensor = { temperature: 28.5, humidity: 65, gas: 420, distance: 35 };
+let history = { time: [], temperature: [], humidity: [], gas: [], distance: [] };
+let autoFeedEnabled = true; // track state auto feed
+
+// ===== MQTT =====
+function connectMQTT() {
+  const options = {
+    clientId: 'pf_' + Math.random().toString(16).substr(2, 8),
+    keepalive: 60,
+    clean: true,
+    reconnectPeriod: 3000,
+    username: 'iotclasszeyys',
+    password: 'cmaGBNGNSirKLjlj',
+    protocolId: 'MQTT'
+  };
+
+  mqttClient = mqtt.connect('wss://iotclasszeyys.cloud.shiftr.io:443', options);
+
+  mqttClient.on('connect', () => {
+    isConnected = true;
+    ['suhukeun','lembabkeun','gaskeun','jarakkeun','status'].forEach(t => mqttClient.subscribe(t));
+    updateConn(true);
+    addLog('terhubung ke broker', 'ok');
+    toast('Terhubung ke ESP32', 'ok');
+  });
+
+  mqttClient.on('message', (topic, msg) => {
+    const val = msg.toString().trim();
+
+    if (topic === 'suhukeun') sensor.temperature = Number(val);
+    else if (topic === 'lembabkeun') sensor.humidity = Number(val);
+    else if (topic === 'gaskeun') {
+      sensor.gas = Number(val);
+      const danger = Number(val) > 2000;
+      if (danger && !alarmActive) { alarmActive = true; toast('Gas berbahaya terdeteksi!', 'err'); addLog('ALARM: gas > 2000', 'warn'); }
+      if (!danger && alarmActive) { alarmActive = false; addLog('alarm gas dimatikan', 'ok'); }
+      toggleAlarm(danger);
+    }
+    else if (topic === 'jarakkeun') sensor.distance = Number(val);
+    else if (topic === 'status') {
+      const map = {
+        FEEDING: ['memberi makan...','info'],
+        FEED_DONE: ['selesai makan','ok'],
+        FEED_STOP: ['servo dihentikan','warn'],
+        ALARM_ON: ['ALARM GAS ON','warn'],
+        ALARM_OFF: ['alarm gas off','ok'],
+        AUTO_ON: ['auto feed aktif','ok'],
+        AUTO_OFF: ['auto feed dimatikan','warn']
+      };
+      if (val === 'AUTO_ON') { autoFeedEnabled = true; updateAutoBtn(); }
+      if (val === 'AUTO_OFF') { autoFeedEnabled = false; updateAutoBtn(); }
+      if (map[val]) addLog(map[val][0], map[val][1]);
+    }
+
+    updateSensors();
+  });
+
+  mqttClient.on('error', () => { isConnected = false; updateConn(false); });
+  mqttClient.on('close', () => { isConnected = false; updateConn(false); addLog('koneksi terputus', 'warn'); });
+}
+
+// history timer tiap 2 detik
+setInterval(() => {
+  const t = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  history.time.push(t);
+  history.temperature.push(sensor.temperature);
+  history.humidity.push(sensor.humidity);
+  history.gas.push(sensor.gas);
+  history.distance.push(sensor.distance);
+  const MAX = 20;
+  ['time','temperature','humidity','gas','distance'].forEach(k => { if (history[k].length > MAX) history[k].shift(); });
+  if (currentPage === 'monitoring') updateCharts();
+}, 2000);
+
+// ===== FEED =====
+function sendFeed() {
+  if (!isConnected || !mqttClient) { toast('ESP32 tidak terhubung', 'err'); return; }
+  mqttClient.publish('perintah/feeder', 'FEED');
+  toast('Perintah makan dikirim', 'ok');
+  addLog('manual feed dikirim', 'info');
+}
+
+function stopFeed() {
+  if (!isConnected || !mqttClient) { toast('ESP32 tidak terhubung', 'err'); return; }
+  mqttClient.publish('perintah/feeder', 'STOP');
+  toast('Servo dihentikan', 'warn');
+  addLog('stop feed dikirim', 'warn');
+}
+
+function toggleAutoFeed() {
+  if (!isConnected || !mqttClient) { toast('ESP32 tidak terhubung', 'err'); return; }
+  const cmd = autoFeedEnabled ? 'AUTO_OFF' : 'AUTO_ON';
+  mqttClient.publish('perintah/feeder', cmd);
+  autoFeedEnabled = !autoFeedEnabled;
+  updateAutoBtn();
+  addLog(autoFeedEnabled ? 'auto feed diaktifkan' : 'auto feed dimatikan', autoFeedEnabled ? 'ok' : 'warn');
+  toast(autoFeedEnabled ? 'Auto feed ON' : 'Auto feed OFF', autoFeedEnabled ? 'ok' : 'err');
+}
+
+function updateAutoBtn() {
+  const btn = document.getElementById('btnAutoFeed');
+  if (!btn) return;
+  if (autoFeedEnabled) {
+    btn.textContent = 'Auto Feed: ON';
+    btn.style.background = 'linear-gradient(135deg, #2e7d50 0%, #40a860 100%)';
+    btn.style.boxShadow = '0 3px 12px #2e7d5030';
+  } else {
+    btn.textContent = 'Auto Feed: OFF';
+    btn.style.background = 'linear-gradient(135deg, #9a8e7a 0%, #b0a090 100%)';
+    btn.style.boxShadow = '0 3px 12px #9a8e7a30';
+  }
+}
+
+// ===== UI =====
+function updateConn(online) {
+  const dot = document.getElementById('connDot');
+  const txt = document.getElementById('connText');
+  const badge = document.getElementById('statusBadge');
+  if (dot) dot.className = 'dot' + (online ? ' online' : '');
+  if (txt) txt.textContent = online ? 'ONLINE' : 'OFFLINE';
+  if (badge) { badge.textContent = online ? 'Online' : 'Offline'; badge.className = 'status-badge ' + (online ? 'online' : 'offline'); }
+}
+
+function updateSensors() {
+  setEl('sTemp', sensor.temperature); setEl('sHum', sensor.humidity);
+  setEl('sGas', sensor.gas); setEl('sDist', sensor.distance);
+  setBar('barTemp', Math.min((sensor.temperature/50)*100, 100));
+  setBar('barHum', sensor.humidity);
+  setBar('barGas', Math.min((sensor.gas/4095)*100, 100));
+  setBar('barDist', Math.min((sensor.distance/200)*100, 100));
+  const gc = document.getElementById('cellGas');
+  if (gc) gc.className = 'sensor-cell' + (sensor.gas > 2000 ? ' danger' : '');
+  setEl('mvTemp', sensor.temperature + '°C'); setEl('mvHum', sensor.humidity + '%');
+  setEl('mvGas', sensor.gas); setEl('mvDist', sensor.distance + ' cm');
+}
+
+function setEl(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+function setBar(id, pct) { const el = document.getElementById(id); if (el) el.style.width = pct + '%'; }
+
+function toggleAlarm(on) {
+  const b = document.getElementById('alarmBanner');
+  if (b) b.className = 'alarm-banner' + (on ? ' show' : '');
+}
+
+function addLog(msg, type='info') {
+  const now = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  logs.unshift({ time: now, msg, type });
+  if (logs.length > 12) logs.pop();
+  renderLogs();
+}
+
+function renderLogs() {
+  const el = document.getElementById('logList');
+  if (!el) return;
+  el.innerHTML = logs.length
+    ? logs.map(l => `<div class="log-item"><span class="log-time">${l.time}</span><span class="log-msg ${l.type}">${l.msg}</span></div>`).join('')
+    : `<div class="log-item"><span class="log-time">--:--:--</span><span class="log-msg">menunggu data...</span></div>`;
+}
+
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (type ? ' '+type : '');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className = 'toast', 2500);
+}
+
+// ===== SENSOR STRIP =====
+function sensorStripHTML() {
+  return `<div class="sensor-strip">
+    <div class="sensor-cell">
+      <div class="s-label">Suhu</div>
+      <div class="s-val"><span id="sTemp">${sensor.temperature}</span><span class="s-unit">°C</span></div>
+      <div class="s-bar"><div class="s-bar-fill" id="barTemp" style="width:${(sensor.temperature/50)*100}%"></div></div>
+    </div>
+    <div class="sensor-cell">
+      <div class="s-label">Kelembaban</div>
+      <div class="s-val"><span id="sHum">${sensor.humidity}</span><span class="s-unit">%</span></div>
+      <div class="s-bar"><div class="s-bar-fill" id="barHum" style="width:${sensor.humidity}%"></div></div>
+    </div>
+    <div class="sensor-cell" id="cellGas">
+      <div class="s-label">Gas MQ-135</div>
+      <div class="s-val"><span id="sGas">${sensor.gas}</span><span class="s-unit">raw</span></div>
+      <div class="s-bar"><div class="s-bar-fill" id="barGas" style="width:${(sensor.gas/4095)*100}%"></div></div>
+    </div>
+    <div class="sensor-cell">
+      <div class="s-label">Jarak</div>
+      <div class="s-val"><span id="sDist">${sensor.distance}</span><span class="s-unit">cm</span></div>
+      <div class="s-bar"><div class="s-bar-fill" id="barDist" style="width:${Math.min((sensor.distance/200)*100,100)}%"></div></div>
+    </div>
+  </div>`;
+}
+
+// ===== PAGES =====
+function renderHome() {
+  currentPage = 'home';
+  document.getElementById('topbarTitle').textContent = 'Overview';
+  document.getElementById('pageContent').innerHTML = `
+    <div class="page">
+      <div id="alarmBanner" class="alarm-banner ${alarmActive ? 'show' : ''}">
+        ⚠ &nbsp; GAS BERBAHAYA — kadar melebihi batas 2000 raw
+      </div>
+      <div class="page-heading">
+        <div class="eyebrow">ESP32 — shiftr.io</div>
+        <h1>Overview</h1>
+        <p>Data real-time dari sensor via MQTT</p>
+      </div>
+      ${sensorStripHTML()}
+      <div class="grid-asym">
+        <div class="card">
+          <div class="card-head">
+            <span class="c-title">Log Status</span>
+            <span class="c-tag">live</span>
+          </div>
+          <div id="logList"></div>
+        </div>
+        <div>
+          <div class="card" style="margin-bottom:1.5rem">
+            <div class="card-head">
+              <span class="c-title">Feed Control</span>
+              <span class="c-tag">manual</span>
+            </div>
+            <div class="card-body" style="text-align:center">
+              <div class="feed-ring" onclick="sendFeed()">
+                <div class="feed-icon">🍖</div>
+                <div class="feed-sublabel">tap to feed</div>
+              </div>
+              <button class="btn-feed" onclick="sendFeed()" style="margin-bottom:0.6rem">Beri Makan Sekarang</button>
+              <button class="btn-feed" onclick="stopFeed()" style="background:linear-gradient(135deg,#c0402a 0%,#e05030 100%);box-shadow:0 3px 12px #c0402a30;margin-bottom:0.6rem">⏹ Stop Servo</button>
+              <button class="btn-feed" id="btnAutoFeed" onclick="toggleAutoFeed()" style="background:linear-gradient(135deg,#2e7d50 0%,#40a860 100%);box-shadow:0 3px 12px #2e7d5030">Auto Feed: ON</button>
+            </div>
+          </div>
+         
+        </div>
+      </div>
+    </div>`;
+  renderLogs();
+  updateSensors();
+  updateAutoBtn();
+}
+
+function renderMonitoring() {
+  currentPage = 'monitoring';
+  document.getElementById('topbarTitle').textContent = 'Monitoring';
+  document.getElementById('pageContent').innerHTML = `
+    <div class="page">
+      <div class="page-heading">
+        <div class="eyebrow">Live Sensor Data</div>
+        <h1>Monitoring</h1>
+        <p>Grafik 20 data terakhir, diperbarui tiap 2 detik</p>
+      </div>
+      ${sensorStripHTML()}
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><span class="c-title">Suhu & Kelembaban</span></div>
+          <div class="chart-row">
+            <div class="chart-row-head">
+              <span class="chart-row-label">Suhu (°C)</span>
+              <span class="chart-row-val" id="mvTemp">${sensor.temperature}°C</span>
+            </div>
+            <div class="chart-wrap"><canvas id="chartTemp"></canvas></div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-row-head">
+              <span class="chart-row-label">Kelembaban (%)</span>
+              <span class="chart-row-val" id="mvHum">${sensor.humidity}%</span>
+            </div>
+            <div class="chart-wrap"><canvas id="chartHum"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="c-title">Gas & Jarak</span></div>
+          <div class="chart-row">
+            <div class="chart-row-head">
+              <span class="chart-row-label">Gas MQ-135 (raw)</span>
+              <span class="chart-row-val" id="mvGas">${sensor.gas}</span>
+            </div>
+            <div class="chart-wrap"><canvas id="chartGas"></canvas></div>
+          </div>
+          <div class="chart-row">
+            <div class="chart-row-head">
+              <span class="chart-row-label">Jarak HC-SR04 (cm)</span>
+              <span class="chart-row-val" id="mvDist">${sensor.distance} cm</span>
+            </div>
+            <div class="chart-wrap"><canvas id="chartDist"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  updateSensors();
+  initCharts();
+}
+
+function renderTentang() {
+  currentPage = 'tentang';
+  document.getElementById('topbarTitle').textContent = 'Tentang';
+  document.getElementById('pageContent').innerHTML = `
+    <div class="page">
+      <div class="page-heading">
+        <div class="eyebrow">Dokumentasi</div>
+        <h1>Tentang</h1>
+        <p>Hardware, konfigurasi MQTT, dan logika sistem</p>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><span class="c-title">Hardware</span></div>
+          <div class="card-body">
+            <table class="spec-table">
+              <tr><td>MCU</td><td>ESP32 — WiFi built-in</td></tr>
+              <tr><td>Suhu/Lembab</td><td>DHT22 → pin 16</td></tr>
+              <tr><td>Gas</td><td>MQ-135 → pin 34 (analog)</td></tr>
+              <tr><td>Jarak</td><td>HC-SR04 → trig:5, echo:18</td></tr>
+              <tr><td>Servo</td><td>pin 4 → 0° tutup / 90° buka</td></tr>
+              <tr><td>LED</td><td>pin 2 → indikator alarm</td></tr>
+              <tr><td>Buzzer</td><td>pin 27 → alarm + notif feed</td></tr>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="c-title">MQTT</span></div>
+          <div class="card-body">
+            <table class="spec-table">
+              <tr><td>Broker</td><td>iotclasszeyys.cloud.shiftr.io</td></tr>
+              <tr><td>Port</td><td>1883 (TCP) / 443 (WSS)</td></tr>
+              <tr><td>suhukeun</td><td>suhu dari DHT22</td></tr>
+              <tr><td>lembabkeun</td><td>kelembaban dari DHT22</td></tr>
+              <tr><td>gaskeun</td><td>nilai raw MQ-135</td></tr>
+              <tr><td>jarakkeun</td><td>jarak cm dari HC-SR04</td></tr>
+              <tr><td>status</td><td>FEEDING / FEED_DONE / ALARM_ON / ALARM_OFF</td></tr>
+              <tr><td>perintah/feeder</td><td>kirim "FEED" untuk manual feed</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ===== CHARTS =====
+const mkChart = (color) => ({
+  type: 'line',
+  data: { labels: [], datasets: [{ data: [], borderColor: color, backgroundColor: color+'20', borderWidth: 1.5, tension: 0.4, fill: true, pointRadius: 0, pointHoverRadius: 3 }] },
+  options: {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, backgroundColor: '#ffffff', titleColor: '#5a4e3c', bodyColor: '#1a1510', borderColor: '#d8d0c0', borderWidth: 1, titleFont: { family: 'DM Mono', size: 10 }, bodyFont: { family: 'DM Mono', size: 11 } } },
+    scales: {
+      x: { display: false },
+      y: { grid: { color: '#d8d0c040', drawBorder: false }, ticks: { color: '#9a8e7a', font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 4 }, border: { display: false } }
+    }
+  }
+});
+
+function initCharts() {
+  const defs = [['chartTemp','#e05010','temperature'],['chartHum','#2e7d50','humidity'],['chartGas','#c0402a','gas'],['chartDist','#2860a8','distance']];
+  defs.forEach(([id, color, key]) => {
+    const ctx = document.getElementById(id)?.getContext('2d');
+    if (!ctx) return;
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(ctx, mkChart(color));
+    charts[id]._key = key;
+  });
+  updateCharts();
+}
+
+function updateCharts() {
+  if (!history.time.length) return;
+  const labels = [...history.time];
+  Object.entries(charts).forEach(([, chart]) => {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = [...history[chart._key]];
+    chart.update('none');
+  });
+  setEl('mvTemp', sensor.temperature+'°C'); setEl('mvHum', sensor.humidity+'%');
+  setEl('mvGas', sensor.gas); setEl('mvDist', sensor.distance+' cm');
+}
+
+// ===== NAV =====
+document.getElementById('sidebar').addEventListener('click', (e) => {
+  const item = e.target.closest('.nav-item');
+  if (item) {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    const page = item.dataset.page;
+    if (page === 'home') renderHome();
+    else if (page === 'monitoring') renderMonitoring();
+    else if (page === 'tentang') renderTentang();
+    if (window.innerWidth <= 640) closeSidebar();
+    return;
+  }
+  if (e.target.closest('#brandHome')) {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    document.querySelector('[data-page="home"]')?.classList.add('active');
+    renderHome();
+  }
+});
+
+// ===== SIDEBAR =====
+function closeSidebar() {
+  document.getElementById('sidebar').classList.add('hidden');
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('main').classList.add('expanded');
+  sidebarOpen = false;
+}
+
+function openSidebar() {
+  document.getElementById('sidebar').classList.remove('hidden');
+  if (window.innerWidth <= 640) document.getElementById('sidebar').classList.add('mobile-open');
+  document.getElementById('main').classList.remove('expanded');
+  sidebarOpen = true;
+}
+
+document.getElementById('menuBtn').addEventListener('click', () => sidebarOpen ? closeSidebar() : openSidebar());
+
+// ===== INIT =====
+for (let i = 5; i >= 0; i--) {
+  const t = new Date(Date.now() - i*2000).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  history.time.push(t); history.temperature.push(sensor.temperature);
+  history.humidity.push(sensor.humidity); history.gas.push(sensor.gas); history.distance.push(sensor.distance);
+}
+
+if (window.innerWidth <= 640) closeSidebar();
+connectMQTT();
+renderHome();
+</script>
+</body>
+</html>s
